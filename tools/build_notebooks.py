@@ -79,6 +79,9 @@ was wrong, set `recorder_clock_offset_s` in the config (see the student guide, *
 '''),
     code('''
 takes = za.discover_takes(cfg.data_dir, recursive=cfg.recursive, pattern=cfg.file_pattern)
+bad = cfg.unmatched_take_keys(takes)
+if bad:
+    print("WARNING: config 'takes:' entries that match no take (typo?):", bad)
 table = za.takes_table(takes)
 table
 '''),
@@ -155,6 +158,20 @@ f = za.load_features(cfg, TAKE)
 print("channels:", f.channels, " bands:", f.bands)
 print("peak |sample| per channel:", np.round(f.meta["peak_abs"], 4))
 print("samples with |x| > 1 (legal in float files, check if unexpected):", f.meta["n_samples_over_unity"])
+'''),
+    md('''
+## Full range, then zoom
+
+The top panel is the whole take. The boxes are zooms chosen from the analysis (quiet baseline, onset,
+loudest 30 s, a significant glide, the strongest single event). The event zoom is recomputed from the
+**raw audio**, because a 0.25 s spectrogram frame is longer than the event. Grey gaps are masked time
+(chirps). Change `CH` to look at another sensor.
+'''),
+    code('''
+CH = f.channels[0]
+zooms = za.views.suggest_zooms(f, CH, baseline=(T0 - 30, T0 - 5) if T0 > 35 else (1, 10),
+                               fmax=min(24000, f.sr / 2))
+fig = za.views.plot_overview_zoom(f, CH, zooms, take=take, fmax=min(24000, f.sr / 2))
 '''),
     code('''
 fig = zp.plot_spectrogram(f, fmax=min(24000, f.sr / 2))
@@ -261,6 +278,41 @@ fig = zp.plot_spectrogram(f, fmax=FMAX, markers=MARKERS)
 zp.save(fig, cfg, f"{TAKE}_spectrogram")
 '''),
     md('''
+### Full range + automatic zooms, and a difference image
+
+`clim=(lo, hi)` fixes the colour range, so use the same values for every take you compare.
+`background=` turns the picture into a **difference image** against a quiet part: white = unchanged,
+red = added. For a separate background take, pass `background_feat=za.load_features(cfg, "<take>")`.
+`units="pa"` shows dB re 1 µPa²/Hz if the channel has `pa_per_fs` in the config.
+'''),
+    code('''
+take = za.find_take(za.discover_takes(cfg.data_dir, recursive=cfg.recursive, pattern=cfg.file_pattern), TAKE)
+CH = f.channels[0]
+zooms = za.views.suggest_zooms(f, CH, baseline=BASELINE, fmax=FMAX)
+pd.DataFrame([{k: v for k, v in z.items() if k != "track"} for z in zooms])
+'''),
+    code('''
+fig = za.views.plot_overview_zoom(f, CH, zooms, take=take, fmax=FMAX, markers=MARKERS)
+zp.save(fig, cfg, f"{TAKE}_overview_zoom")
+'''),
+    code('''
+fig = za.views.plot_overview_zoom(f, CH, zooms, take=take, fmax=FMAX, markers=MARKERS, background=BASELINE)
+zp.save(fig, cfg, f"{TAKE}_difference")
+'''),
+    md('''
+Zoom by hand anywhere: a list of boxes `dict(name, t0, t1, f0, f1, why)`, or a single raw-audio view of
+one event.
+'''),
+    code('''
+my_zooms = [dict(name="early reaction", t0=AFTER[0], t1=AFTER[0] + 20, f0=1000, f1=10000, why="hand-picked"),
+            dict(name="late", t0=AFTER[1] - 20, t1=AFTER[1], f0=1000, f1=10000, why="hand-picked")]
+fig = za.views.plot_overview_zoom(f, CH, my_zooms, fmax=FMAX, background=BASELINE, clim=(-30, 30))
+ev = f.events[(f.events.channel == CH) & (f.events.t_s > AFTER[0])]
+if len(ev):
+    t_ev = float(ev.t_s.iloc[0])
+    fig = za.views.plot_raw_zoom(take, CH, t_ev - 0.01, t_ev + 0.05, fmax=FMAX, cfg=cfg)
+'''),
+    md('''
 ## 3. Band levels, as change relative to the baseline
 
 Absolute dB values are **uncalibrated** (dB re digital full scale) and differ between sensors for
@@ -338,6 +390,20 @@ tab.pivot_table(index=["channel", "label"], columns=["band", "window"], values="
 '''),
     code('''
 tab[tab["window"] == "after"].pivot_table(index=["channel", "label"], columns="band", values="delta_dB").round(1)
+'''),
+    md('''
+## 8. Save the standard figure set
+
+One call writes every standard figure for this take (overview + zooms, difference image, waveforms,
+spectrogram, levels, spectra, trigger rate, detector, inter-event gaps, glide, glide interpretation) plus a
+summary CSV and an `INDEX.md` page describing each figure, into `figures_dir/<take>_figure_set/`.
+Examples for real data are in `examples/`.
+'''),
+    code('''
+paths, summ = za.report.save_figure_set(cfg, TAKE, baseline=BASELINE, after=AFTER, markers=MARKERS,
+                                        fmax=FMAX, glide_seed=(4000, 8000))
+print("wrote", len(paths), "files to", paths[0].parent)
+summ.round(2)
 '''),
 ]
 
@@ -734,17 +800,223 @@ tab[["take", "channel", "f_start_hz", "f_end_hz", "octaves", "median_contrast_db
 tab.to_csv(cfg.figures_path / "glide_summary.csv", index=False)
 print("wrote", cfg.figures_path / "glide_summary.csv")
 '''),
+    md('''
+## Interpretation: what would each mechanism need?
+
+`glide.interpret` turns the ridge f(t) into the parameter each candidate mechanism requires
+(`docs/GLIDE_INTERPRETATION.md` has the physics):
+
+* **A, one growing bubble:** Minnaert radius R(t) and growth rate. Bond number ≥ 1 (R above the 2.73 mm
+  capillary length) means impossible as a free sphere. A bubble on a wall rings 0.816× lower, so it can be
+  smaller.
+* **B, a bubbly layer:** Wood's-law void fraction for assumed layer thicknesses. Gaps mean no void fraction
+  ≤ 2 % works.
+
+This does not identify the mechanism. It shows which readings are physically possible. Discriminating
+tests (depth dependence, sensor dependence, odd vs integer harmonics, a camera) are in the doc.
+'''),
+    code('''
+best = int(summary.sort_values("median_contrast_db").channel.iloc[-1])
+it = G.interpret(tracks[best], depths_m=(0.005, 0.01, 0.02, 0.04))
+fig = zp.plot_glide_interpretation(it, f"{TAKE} {f.label(best)}")
+zp.save(fig, cfg, f"{TAKE}_glide_interpretation")
+G.interpretation_summary(it)
+'''),
+]
+
+# ============================================================================ 08
+NOTEBOOKS["08_acoustics_vs_pH_correlation"] = [
+    md('''
+# 08 · Correlating sound with pH
+
+Build acoustic time series (the level in **any narrow band you choose**, excess over a background, or the
+trigger rate of all or only loud events), and pH or **dpH/dt**. Then correlate them honestly:
+
+* **n_eff**: two smooth series correlate whatever the mechanism. The effective number of independent pairs
+  (Bretherton et al. 1999) sets the p-value, not n.
+* **differences=True**: correlate changes against changes, which removes a shared trend.
+* **band scan**: which frequency band tracks pH? Look for a coherent range of bands, not a single one.
+
+On the demo (a single decaying reaction) every band correlates at |r| ≈ 0.9 with n_eff ≈ 2, which is
+**not significant**. That is the correct answer: one monotonic run cannot establish a relation. Several takes
+under different conditions can.
+'''),
+    code('''
+# ==== YOUR SETTINGS ====
+CONFIG = "../config/demo.yaml"
+CH = 1
+BAND_HZ = (3000.0, 6000.0)        # any band, chosen after processing (from the stored spectrogram)
+BASELINE_TAKE, BASELINE = "DEMO_002", (5.0, 34.0)
+START_AFTER = "2026-10-01 10:03:00"   # use pH after the reaction started
+DT_S = 10.0
+MAX_LAG_S = 120.0
+LOUD_EVENT_DB = -55.0             # "loud" triggers only (envelope dB re FS^2); None = all
+'''),
+    code(SETUP),
+    code('''
+from zoom_acoustics import correlate as R
+feats = [f for f in za.load_all_features(cfg) if CH in f.channels]
+fb = za.load_features(cfg, BASELINE_TAKE)
+ph = za.ph.load_ph_from_config(cfg)
+ph = ph[ph.index > pd.Timestamp(START_AFTER)]
+dph = R.ph_rate(ph, smooth_s=90)
+band = R.band_timeline(feats, CH, *BAND_HZ, dt=DT_S)
+b0 = R.band_level_from_psd(fb, CH, *BAND_HZ)
+base = float(b0[(b0.index >= BASELINE[0]) & (b0.index < BASELINE[1])].mean())
+band_ex = R.excess(band, base)
+rate_all = R.event_count_timeline(feats, CH, bin_s=DT_S)
+rate_loud = R.event_count_timeline(feats, CH, bin_s=DT_S, min_env_db=LOUD_EVENT_DB)
+print(f"baseline in {BAND_HZ} Hz: {10*np.log10(base):.1f} dB re FS^2")
+'''),
+    md('## Level in the chosen band vs pH, and vs dpH/dt'),
+    code('''
+res, scan = R.correlate(band_ex, ph["pH"], dt_s=DT_S, max_lag_s=MAX_LAG_S)
+fig = zp.plot_correlation_panel(band_ex, ph["pH"], res, x_label=f"excess {BAND_HZ[0]/1e3:g}-{BAND_HZ[1]/1e3:g} kHz [dB]",
+                                title=f"Ch{CH} band excess vs pH")
+zp.save(fig, cfg, "corr_band_vs_pH")
+pd.Series(res).drop("note", errors="ignore").to_frame("value")
+'''),
+    code('''
+res_d, _ = R.correlate(band_ex, dph, dt_s=DT_S, max_lag_s=MAX_LAG_S)
+res_diff, _ = R.correlate(band_ex, ph["pH"], dt_s=DT_S, differences=True)
+pd.DataFrame({"vs pH": res, "vs dpH/dt": res_d, "changes vs changes": res_diff}).T[
+    ["lag_s", "pearson_r", "spearman_rho", "slope_y_per_dB", "n", "n_eff", "p_value_neff", "note"]]
+'''),
+    md('## Trigger rate (all, and loud events only) vs pH'),
+    code('''
+rows = {}
+for name, s in (("all triggers", rate_all), (f"triggers > {LOUD_EVENT_DB} dB", rate_loud)):
+    r, _ = R.correlate(s, ph["pH"], dt_s=DT_S, x_in_db=False)
+    rows[name] = r
+fig = zp.plot_correlation_panel(rate_all, ph["pH"], rows["all triggers"], x_label="triggers / s",
+                                x_in_db=False, title=f"Ch{CH} trigger rate vs pH")
+pd.DataFrame(rows).T[["pearson_r", "spearman_rho", "n", "n_eff", "p_value_neff", "note"]]
+'''),
+    md('''
+## Which band tracks pH? (third-octave scan, excess over the baseline)
+
+Filled markers: p(n_eff) < 0.05. With 16 bands, about 1 passes by chance. The lower panel is the best lag
+per band: if it jumps around, the lag is noise.
+'''),
+    code('''
+scan = R.band_scan(feats, CH, ph["pH"], bands=R.log_bands(500, 20000, 3), dt_s=DT_S,
+                   max_lag_s=MAX_LAG_S, baseline=(fb, BASELINE))
+fig = zp.plot_band_scan(scan, f"Ch{CH}: third-octave excess vs pH")
+zp.save(fig, cfg, "corr_band_scan")
+scan[["f_lo", "f_hi", "lag_s", "pearson_r", "slope_y_per_dB", "n", "n_eff", "p_value_neff"]].round(3)
+'''),
+    code('''
+out = pd.DataFrame({"pH": ph["pH"], "dpH_dt_per_min": dph})
+out[f"ch{CH}_{BAND_HZ[0]:g}_{BAND_HZ[1]:g}Hz_excess_dB"] = 10 * np.log10(
+    za.ph.acoustic_at(ph.index, band_ex, DT_S, how="mean").to_numpy())
+out.to_csv(cfg.figures_path / "ph_band_aligned.csv")
+out.dropna().head()
+'''),
+]
+
+# ============================================================================ 09
+NOTEBOOKS["09_real_example_sep2026"] = [
+    md('''
+# 09 · A real example: Sep-2026 calcite in HCl (takes 260910_011 and 260910_016)
+
+This is what **real** data look like, and what the standard analysis gives. The notebook was executed on the
+lab machine where the recordings live (1.2 GB each, not in the repository), and its outputs are saved here,
+so you can read it without the files. The same figure sets are in `examples/real_260910_011/` and
+`examples/real_260910_016/`.
+
+Setup: 4 channels at 192 kHz (two hydrophones on opposite sides of the crystal, a contact sensor bonded to
+it, an air mic as veto). An active chirp every 10 s is masked. Take 011 is 1 M HCl, with the sample dropped
+at ~33 s, acid at ~45 s and a second addition at ~250 s. Take 016 is 0.5 M.
+'''),
+    code('''
+# ==== YOUR SETTINGS ====
+CONFIG = "../config/real_example_sep2026.yaml"
+'''),
+    code(SETUP),
+    code('''
+takes = za.discover_takes(cfg.data_dir, recursive=cfg.recursive, pattern=cfg.file_pattern)
+za.process_all(takes, cfg, verbose=False)
+za.takes_table(takes)
+'''),
+    md('## Take 011: full range, zooms, difference image'),
+    code('''
+f = za.load_features(cfg, "260910_011")
+take = za.find_take(takes, "260910_011")
+MARK = {"sample drop": 33.0, "acid": 45.0, "2nd addition": 250.0}
+z = za.views.suggest_zooms(f, 1, baseline=(3, 25))
+fig = za.views.plot_overview_zoom(f, 1, z, take=take, markers=MARK)
+'''),
+    code('''
+fig = za.views.plot_overview_zoom(f, 1, z, take=take, markers=MARK, background=(3, 25))
+'''),
+    md('''
+**Read it like this.** Before the acid only the 5.6 kHz apparatus line and low-frequency room noise are
+present. At acid contact (~45 s) all wetted channels rise by 13–35 dB in the audio band. Right after the
+onset there is a fan of parallel descending ridges. The air mic rises by only ~2 dB, so the sound is
+liquid/solid-borne. The contact sensor responds strongly to the second addition at ~250 s.
+'''),
+    code('''
+fig = zp.plot_levels(f, bands=("low", "audio", "rig", "hb1"), dt=1.0, relative_to=(3, 25), markers=MARK)
+'''),
+    code('''
+fig = zp.plot_psd(f, {"baseline": (3, 25), "reaction": (60, 240)}, fmax=40000, fmin=100, excess=True)
+'''),
+    code('''
+fig = zp.plot_event_rate(f, "audio", bin_s=5.0, markers=MARK)
+fig = zp.plot_detector(f, 1, "audio", 60.0, 60.5)
+'''),
+    md('## Take 016: the strongest glide, and what it would require'),
+    code('''
+from zoom_acoustics import glide as G
+f16 = za.load_features(cfg, "260910_016")
+tracks, rows = {}, []
+for c in f16.channels:
+    tr = G.track_ridge(f16, c, (3, 25), 49.5, seed=(4000, 12000))
+    s = G.summarize(tr)
+    tracks[c] = tr
+    rows.append(dict(channel=c, label=f16.label(c), **s))
+pd.DataFrame(rows)[["channel", "label", "f_start_hz", "f_end_hz", "octaves", "median_contrast_db", "significant"]].round(2)
+'''),
+    code('''
+fig = zp.plot_glide(f16, tracks, (3, 25), show_ch=1)
+'''),
+    code('''
+it = G.interpret(tracks[1])
+fig = zp.plot_glide_interpretation(it, "260910_016 Ch1")
+G.interpretation_summary(it)
+'''),
+    code('''
+G.harmonic_ladder(f16, 1, (3, 25), tracks[1]).round(2)
+'''),
+    md('''
+**Interpretation (see docs/GLIDE_INTERPRETATION.md).** Only Ch1 has a significant ridge (6.3 → 1.0 kHz). A
+single free bubble would have to exceed the capillary length (Bond > 1) in the late part, so it is not
+self-consistent. A wall-attached bubble or a bubbly layer ≥ ~4 cm thick fits the frequencies. Harmonics are
+not resolved above the controls. The mechanism is **not** established. The discriminating experiment is to
+record the liquid depth and repeat at two depths.
+'''),
 ]
 
 
-def main():
+def main(argv=()):
+    """--execute: run every notebook (demo data; notebook 09 needs the Sep-2026 files) and
+    save it WITH outputs, so figures are visible on GitHub.  --only NAME: just that one."""
+    import sys
+    argv = list(argv or sys.argv[1:])
+    only = argv[argv.index("--only") + 1] if "--only" in argv else None
     NB.mkdir(exist_ok=True)
     for name, cells in NOTEBOOKS.items():
+        if only and only not in name:
+            continue
         nb = nbf.v4.new_notebook()
         nb.cells = cells
         nb.metadata["kernelspec"] = dict(name="python3", display_name="Python 3", language="python")
+        if "--execute" in argv:
+            from nbclient import NotebookClient
+            NotebookClient(nb, timeout=1800, kernel_name="python3",
+                           resources={"metadata": {"path": str(NB)}}).execute()
         nbf.write(nb, NB / f"{name}.ipynb")
-        print("wrote", NB / f"{name}.ipynb")
+        print("wrote", NB / f"{name}.ipynb", "(executed)" if "--execute" in argv else "")
 
 
 if __name__ == "__main__":

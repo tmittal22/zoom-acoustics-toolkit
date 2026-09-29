@@ -372,11 +372,15 @@ class Features:
             acc += np.asarray(P[idx[i:i + 2000]], float).sum(axis=0)
         return acc / len(idx), int(m.sum())
 
-    def band_level_in_window(self, ch, band, t0, t1, extra_masks=None):
-        """Mean square [FS^2] of one band over [t0, t1), masked."""
+    def band_level_in_window(self, ch, band, t0, t1, extra_masks=None, stat="mean"):
+        """Mean square [FS^2] of one band over [t0, t1), masked.
+        stat="mean": the ENERGY average (physically additive, but one impulse such as a
+        sample drop can dominate it); stat="median": robust typical level."""
         t, y, _ = self.level_series(ch, band, extra_masks=extra_masks)
         m = (t >= t0) & (t < t1) & np.isfinite(y)
-        return float(np.mean(y[m])) if m.any() else np.nan
+        if not m.any():
+            return np.nan
+        return float(np.median(y[m]) if stat == "median" else np.mean(y[m]))
 
     def redetect(self, ch, band="audio", extra_masks=None, **params):
         """Re-run the STA/LTA detector on the stored envelope with new settings / masks.

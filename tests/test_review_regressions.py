@@ -199,3 +199,18 @@ def test_nonfinite_samples_are_reported(tmp_path, cfg_factory):
     f = za.load_features(cfg, take.name)
     assert f.meta["n_nonfinite"] == [10]
     assert any("NaN" in n for n in f.meta["notes"])
+
+
+def test_yaml_keeps_zoom_take_names_as_strings(tmp_path):
+    """YAML 1.1 reads 260910_011 as the int 260910011; the take section was silently lost."""
+    p = tmp_path / "c.yaml"
+    p.write_text("data_dir: .\ntakes:\n  260910_011:\n    masks: [[1, 2]]\n"
+                 "channels:\n  1: {name: A, sensor: hydrophone}\ndsp:\n  level_dt: 0.25\n"
+                 "  trig_on: 8\n  lta_s: 6.0e-2\n")
+    cfg = za.load_config(p)
+    assert cfg.take_opts("260910_011")["masks"] == [[1, 2]]
+    assert cfg.channel_info(1)["name"] == "A"
+    assert cfg["dsp"]["level_dt"] == 0.25 and cfg["dsp"]["trig_on"] == 8
+    assert cfg["dsp"]["lta_s"] == 0.06
+    import yaml
+    assert list(yaml.safe_load(p.read_text())["takes"]) == [260910011]   # the trap, for the record

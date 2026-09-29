@@ -3,7 +3,7 @@
 Four layers of evidence, each checked against something independent of the code itself:
 
 1. **Unit tests** against analytic answers. Each gating test is paired with a deliberately wrong
-   implementation that the same assertion rejects (`python -m pytest`, 53 tests).
+   implementation that the same assertion rejects (`python -m pytest`, 65 tests).
 2. **Regression tests** for every defect found in an independent line-by-line code review
    (`tests/test_review_regressions.py`, §2).
 3. **Synthetic recovery** on the demo dataset, where the truth is known (`validation/demo_recovery.py`).
@@ -44,6 +44,17 @@ A fresh environment built from `environment.yml` alone (48 s) passes the same su
 | `test_interevent_detects_bursts` | 500 bursts of 10 | CV > 2, Fano > 3, burst count within 5 % | |
 | `test_coincidence_excess_over_chance` | 40 % shared events, 0.3 ms lag | excess 0.40 ± 0.05, lag 0.3 ms; independent: < 0.03 | |
 | `test_waveform_features_and_repeater_cluster` | 60 ringdowns Q = 10 + 12 identical rattles | median Q in 8–12; top cluster = exactly the 12 rattles | |
+| `test_wood_limits_and_values` | Wood's law: β → 0 gives c_w; gas-dominated limit | exact; < 2 % at β = 10⁻² | the old "10⁻⁴ → 300 m/s" statement: rejected (it is 909 m/s) |
+| `test_layer_mode_inversion_roundtrip_and_limits` | layer mode ↔ β | round trip 1e-6; NaN outside validity | |
+| `test_wall_and_fritz` | Strasberg factor √(2/3) touching; Fritz force balance | exact | |
+| `test_interpret_growing_bubble_bond_flag` | bubble growing 10 µm/s | R(t), dR/dt exact; Bond flag raised | |
+| `test_difference_image_and_calibration` | tone after 15 s; pa_per_fs = 10 | background ≈ 0 dB, tone > 30 dB; +140 dB for µPa | |
+| `test_suggest_zooms_and_overview` | onset at 15 s | onset zoom brackets it | |
+| `test_n_eff_white_vs_smooth` | white vs 20-point smoothed noise | n_eff ≈ n vs ≈ n/10 | |
+| `test_spurious_correlation_of_two_trends_is_not_significant` | two independent random walks | n_eff < 40, p(n_eff) ≫ naive p | naive p (n = 200) ~1e-50 ✔ rejected |
+| `test_correlate_recovers_lag_and_slope` | pH = −0.1 × level, 30 s later | lag 30 s, slope −0.10 | |
+| `test_ph_rate`, `test_band_level_from_psd_matches_tone` | linear pH ramp; tone A²/2 | exact; < 1 % | |
+| `test_yaml_keeps_zoom_take_names_as_strings` | `260910_011:` key | stays a string | plain YAML reads int 260910011 ✔ (the trap) |
 
 ## 2. Independent code review and its regression tests
 
@@ -197,10 +208,25 @@ the result depends on the chosen threshold (6 dB here).
 
 ![real glide](figures/real_016_glide.png)
 
+**V5: harmonics and interpretation of the 016 ridge.** Harmonic ladder, Ch1: 2× 5.0 dB (early) / 3.6 dB
+(late) against controls 4.3–5.4 dB, so **inconclusive**. Interpretation: free bubble 0.54–3.32 mm (Bond up to
+1.49, not self-consistent); wall-attached bubble 0.44–2.71 mm; bubbly layer needs β 9·10⁻⁵–6·10⁻³ at
+h = 40 mm and is outside the model for h ≤ 20 mm. See docs/GLIDE_INTERPRETATION.md.
+
+**Config trap found while building the examples:** YAML 1.1 reads the unquoted key `260910_011` as the
+integer 260910011, so the per-take chirp masks were silently ignored and the baseline mean was dominated by
+chirps. The loader now keeps underscored numbers as strings (test above), and notebook 00 warns about config
+take names that match no take.
+
+**Correlation on the demo** (notebook 08): every third-octave band correlates with pH at |r| ≈ 0.9, but
+n_eff = 2, so nothing is significant. This is the correct result for one monotonic run. The regression
+slope is still right (−0.08 against −0.10 pH per dB).
+
 ## 5. Notebooks
 
-All eight notebooks (00–07) run top to bottom with `jupyter nbconvert --execute` on the demo dataset with
-no errors, and their figures were inspected.
+All ten notebooks (00–09) are executed by `python tools/build_notebooks.py --execute` and committed with
+their outputs: 00–08 on the demo dataset, 09 on the real Sep-2026 takes. They run with no errors (39 embedded
+figures), and the figures were inspected.
 
 ## 6. What is not validated
 

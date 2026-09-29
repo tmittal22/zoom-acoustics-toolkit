@@ -16,7 +16,7 @@ recorder WAVs ──► discover takes ──► one streaming pass per take ─
  (+ pH log)        (io.py)            (features.py: filters, PSD,      (level, psd, env, events)
                                         STA/LTA detector)                    │
                                                                              ▼
-                              notebooks 01-07  ◄──  Features / timeline / ph / catalogue / glide / plots
+                              notebooks 01-09  ◄──  Features / views / timeline / ph / correlate / catalogue / glide / plots
 ```
 
 ## Install (once)
@@ -25,8 +25,17 @@ recorder WAVs ──► discover takes ──► one streaming pass per take ─
 conda env create -f environment.yml
 conda activate zoom-acoustics
 pip install -e .
-python -m pytest            # 53 tests, ~4 s. All must pass.
+python -m pytest            # 65 tests, ~5 s. All must pass.
 ```
+
+## What it looks like
+
+A real take (Sep-2026, calcite in 1 M HCl, 4 channels): the whole take, band levels, and zooms chosen by the
+analysis (baseline, onset, loudest part, a glide, and one event from the raw audio).
+
+![overview](examples/real_260910_011/00_overview_zoom.png)
+
+More in [examples/](examples/README.md).
 
 ## Try it on the synthetic demo data first (5 minutes)
 
@@ -57,7 +66,12 @@ Then open the notebooks in order. They run unchanged on the demo; the demo has a
 | `04_time_variation_and_pH` | all takes on one lab-clock axis, pH loading, excess power vs pH, lag correlation, CSV export |
 | `05_compare_takes` | same channel across takes: spectra, within-take changes, trigger rates |
 | `06_event_catalogue_and_clustering` | clustering in time (CV, Fano, bursts), cross-channel coincidence, waveform features, correlation clusters (repeaters), feature-space clusters, catalogue CSV |
-| `07_glide_analysis` | descending spectral ridges: tracking per channel, significance, harmonic ladder, following a ridge across takes |
+| `07_glide_analysis` | descending spectral ridges: tracking per channel, significance, harmonic ladder, following a ridge across takes, **interpretation** (growing bubble vs bubbly layer) |
+| `08_acoustics_vs_pH_correlation` | level in any narrow band, excess, trigger rate (all / loud events) vs pH and dpH/dt; lags; effective sample size; third-octave band scan |
+| `09_real_example_sep2026` | a real 4-channel take and the strongest real glide, executed with outputs (data not in the repo) |
+
+All notebooks are committed **with their outputs** (demo data; notebook 09 real data), so every figure is
+visible on GitHub before you run anything. `examples/` holds complete figure sets of real takes.
 
 Command line (for long batch runs):
 
@@ -80,14 +94,19 @@ zoom_acoustics/     the package
   ph.py             pH/logger loading (csv/xlsx, several time formats), alignment, lag correlation
   physics.py        Minnaert resonance (use with care, see the guide)
   catalogue.py      waveform snippets + features, temporal clustering, coincidence, waveform clustering
-  glide.py          excess spectrogram, ridge tracker, significance, harmonic ladder, Bond check
+  glide.py          excess spectrogram, ridge tracker, significance, harmonic ladder, interpretation
+  views.py          full range + automatic zooms, difference images, raw-audio event zoom
+  correlate.py      narrow-band timelines, dpH/dt, lagged correlation with n_eff, band scan
+  report.py         save_figure_set: the standard figure set of one take + INDEX.md
   plots.py          standard figures (any channel count, fixed colour per channel)
   demo.py           synthetic dataset with ground truth
-notebooks/          00-07, the student workflow
+notebooks/          00-09, the student workflow (committed with outputs)
+examples/           complete figure sets of real takes 260910_011, 260910_016 and the demo
 config/             TEMPLATE.yaml (copy this), demo.yaml
 tests/              pytest suite, each gating test paired with a wrong-implementation control
 validation/         demo_recovery.py (synthetic truth); real_data_crosscheck.py, real_glide_crosscheck.py (Sep-2026 data)
-docs/               STUDENT_GUIDE, WALKTHROUGH (code + method), VALIDATION (evidence), figures/
+docs/               STUDENT_GUIDE, WALKTHROUGH (code + method), VALIDATION (evidence),
+                    GLIDE_INTERPRETATION (physics of glides), figures/
 THEORY.md           every equation the code implements, with units and code locations
 PRIORS.md           constraints a result must satisfy before you believe it
 tools/              build_notebooks.py (notebooks are generated from it)

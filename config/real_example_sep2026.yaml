@@ -1,0 +1,24 @@
+# Real example: Sep-2026 calcite/HCl session, take 260910_011 (EXP3, 1 M HCl, 4 channels,
+# 192 kHz).  The audio files are NOT in the repository (1.2 GB); this config only works on the
+# lab machine, or wherever you copy Dataset2_ThusSep10/passive/.  The resulting figures are in
+# examples/real_260910_011/ so you can see what real data look like without the files.
+project: sep2026_example
+data_dir: /media/tmittal/Disk1/BKG_Data_Drive/experiment/Dataset2_ThusSep10/passive
+file_pattern: "260910_01[16]\\.WAV"
+cache_dir: ../cache/sep2026_example
+figures_dir: ../examples
+
+channels:
+  1: {name: "Hydrophone side A", sensor: hydrophone}
+  2: {name: "Hydrophone side B", sensor: hydrophone}
+  3: {name: "Contact sensor on crystal", sensor: contact}
+  4: {name: "Air mic (veto)", sensor: air}
+
+# a 1 s exponential chirp (0.1-20 kHz) every 10.000 s, found with masks.find_periodic_bursts
+takes:
+  260910_011:
+    note: "EXP3 1 M HCl; sample drop ~33 s, acid ~45 s, second addition ~250 s"
+    periodic: {period_s: 10.0, first_s: 1.375, pad_before_s: 0.5, pad_after_s: 1.5}
+  260910_016:
+    note: "EXP3 0.5 M HCl; strongest glide of the session on Ch1"
+    periodic: {period_s: 9.999846658919022, first_s: 4.486163890667507, pad_before_s: 0.25, pad_after_s: 1.4}

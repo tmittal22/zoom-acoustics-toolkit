@@ -8,9 +8,30 @@ with an explanation.
 from __future__ import annotations
 
 import copy
+import re
 from pathlib import Path
 
 import yaml
+
+
+class _Loader(yaml.SafeLoader):
+    """SafeLoader in which numbers never contain underscores.
+
+    YAML 1.1 (PyYAML) reads 260910_011 as the INTEGER 260910011, because '_' is a legal digit
+    separator.  Zoom take names look exactly like that, so every per-take section of the
+    config (masks, channel overrides, notes) was silently ignored.  Here an int is only
+    [-+]?digits, so 260910_011 stays the string '260910_011' while 1, 2, 3 stay ints."""
+
+
+_Loader.yaml_implicit_resolvers = {
+    k: [(tag, rx) for tag, rx in v if tag not in ("tag:yaml.org,2002:int", "tag:yaml.org,2002:float")]
+    for k, v in yaml.SafeLoader.yaml_implicit_resolvers.items()}
+_Loader.add_implicit_resolver("tag:yaml.org,2002:int", re.compile(r"^[-+]?(0|[1-9][0-9]*)$"),
+                              list("-+0123456789"))
+_Loader.add_implicit_resolver(
+    "tag:yaml.org,2002:float",
+    re.compile(r"^[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?$|^[-+]?\.(inf|Inf|INF)$|^\.(nan|NaN|NAN)$"),
+    list("-+0123456789."))
 
 SENSOR_TYPES = ("hydrophone", "contact", "air", "other")
 
@@ -112,7 +133,13 @@ class Config(dict):
         return f"Ch{ch} {i['name']}" if not i["name"].startswith(f"Ch{ch}") else i["name"]
 
     def take_opts(self, take: str) -> dict:
-        return (self.get("takes") or {}).get(take, {}) or {}
+        return (self.get("takes") or {}).get(str(take), {}) or {}
+
+    def unmatched_take_keys(self, takes) -> list:
+        """Config `takes:` entries that match no discovered take (typos, or a name that the
+        YAML parser changed).  Notebook 00 prints these."""
+        names = {t.name for t in takes}
+        return [k for k in (self.get("takes") or {}) if k not in names]
 
 
 def _merge(base, over):
@@ -128,7 +155,8 @@ def _merge(base, over):
 def load_config(path) -> Config:
     path = Path(path).expanduser().resolve()
     with open(path) as fh:
-        raw = yaml.safe_load(fh) or {}
+        raw = yaml.load(fh, Loader=_Loader) or {}
+    raw["takes"] = {str(k): v for k, v in (raw.get("takes") or {}).items()}
     cfg = Config(_merge(DEFAULTS, raw))
     root = path.parent
 

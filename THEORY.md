@@ -277,3 +277,50 @@ of equal $Q$ and frequencies $f, f(1+\epsilon)$, $\rho$ stays high while $\epsil
 population of single-mode ringdowns forms tight clusters by frequency. That is why cluster size alone does
 not identify a repeater (VALIDATION C1). **Feature clustering:** Ward linkage on z-scored
 $\log_{10}$ features, $k$ clusters, and PCA scores by SVD for display.
+
+## 12. Glide interpretation (`glide.interpret`, `physics.py`)
+
+Derivations and the mechanism table are in [docs/GLIDE_INTERPRETATION.md](docs/GLIDE_INTERPRETATION.md).
+Implemented relations:
+
+* Single bubble: $R(t) = $ `minnaert_R`$(\tilde f(t))$ on the 10 s running-median track;
+  $\dot R = \mathrm{d}R/\mathrm{d}t$ (central differences); Bond $= (R/\ell_c)^2$.
+* Bubble touching a rigid wall: $f_\mathrm{wall} = f_\mathrm{free}(R)\,(1 + R/2h)^{-1/2}$, with
+  $h = R$ giving $\sqrt{2/3} = 0.816$ (`wall_factor`). The observed $f$ then needs $R$ with
+  $f_\mathrm{free}(R) = f/0.816$.
+* Bubbly layer: Wood's law $1/(\rho_m c_m^2) = (1-\beta)/(\rho_w c_w^2) + \beta/(\kappa P_0)$,
+  $\rho_m = (1-\beta)\rho_w$; quarter-wave $f = c_m/4h$; $\beta(f, h)$ by bisection in
+  $\log\beta$, NaN if $\beta > 2\,\%$ would be needed or $f > c_w/4h$ (`beta_from_layer_mode`).
+  Gas-dominated check: $c_m^2 \to \kappa P_0 / (\rho_w \beta(1-\beta))$ (tested to 2 % at
+  $\beta = 10^{-2}$).
+* Fritz departure: $\tfrac43\pi R^3 \rho g = \pi d \sigma$ (tested exactly).
+
+## 13. Acoustics vs pH (`correlate.py`)
+
+* **Narrow band from the stored PSD:** $\overline{y^2}_{[f_\ell, f_h)}(t_j) = \Delta f
+  \sum_{f_\ell \le f_m < f_h} \hat S(t_j, f_m)$, masked frames NaN, then binned in linear power.
+  Any band can be chosen after processing. Its resolution is the PSD bin width, so a band narrower
+  than ~5 bins is resolution-limited.
+* **pH rate:** a least-squares slope of pH against time within $\pm$`smooth_s`/2 of each sample,
+  $\times 60$ → pH per minute (tested exactly on a linear ramp).
+* **Correlation:** both series averaged onto a common grid; for lag $\ell$, Pearson $r$ and Spearman
+  $\rho$ of $y(t+\ell)$ vs $10\log_{10}x(t)$; best $|r|$ reported. **Effective sample size**
+  $n_\mathrm{eff} = n(1 - r_1 r_2)/(1 + r_1 r_2)$ from the lag-1 autocorrelations $r_1, r_2$
+  (Bretherton et al. 1999); $t = r\sqrt{(n_\mathrm{eff}-2)/(1-r^2)}$, two-sided p with
+  $n_\mathrm{eff}-2$ degrees of freedom. `differences=True` correlates first differences, which
+  removes shared trends. The test `test_spurious_correlation_of_two_trends_is_not_significant` shows two
+  independent random walks: the naive p is ~10⁻⁵⁰, while the $n_\mathrm{eff}$ p is over 100× larger.
+* **Band scan:** the above for every third-octave band (or any list). With ~16 bands, about 1 passes
+  p < 0.05 by chance.
+
+## 14. Views (`views.py`, `plots.spectrogram_db`)
+
+* **Difference image:** $D_\mathrm{ratio} = 10\log_{10}(\hat S / \bar S_\mathrm{bg})$ or
+  $D_\mathrm{excess} = 10\log_{10}\max(\hat S - \bar S_\mathrm{bg}, 0)$, with $\bar S_\mathrm{bg}$ the
+  mean unmasked PSD of a background window (same take or a background take) averaged onto the displayed
+  frequency rows exactly.
+* **Calibration:** with `pa_per_fs` = $k$ (Pa per unit full scale) for a channel,
+  dB re 1 µPa²/Hz $=$ dB re FS²/Hz $+ 10\log_{10}(k^2/10^{-12})$ (tested: $k = 10$ gives +140 dB).
+* **Colour/level range:** `clim` fixes the dB limits for the overview and every zoom; otherwise the
+  2nd–99.5th percentiles are used (symmetric for difference images).
+* **Raw zoom:** STFT of the raw samples, 256-sample Hann segments, 90 % overlap (1.3 ms at 192 kHz).

@@ -135,6 +135,14 @@ take). `track_ridge` follows one ridge under the continuity constraint and recor
 Minnaert/Bond feasibility. `harmonic_ladder` tests m × f(t) against non-integer controls.
 `track_ridges` seeds several ridges and flags pairs that merge onto one feature.
 
+## 6c. Views, correlation and the figure set (`views.py`, `correlate.py`, `report.py`)
+
+`views.suggest_zooms` derives zoom boxes from the analysis. `plot_overview_zoom` draws the full take, a
+level strip and the zooms on one colour scale (difference image with `background=`). Raw-audio zooms use
+`raw_zoom_axes`. `correlate.band_timeline` integrates any band from the stored PSD across takes.
+`correlate.correlate` grids two series, scans lags and computes n_eff. `band_scan` loops over bands.
+`report.save_figure_set` calls all of the above for one take and writes `INDEX.md`.
+
 ## 7. Figures (`plots.py`)
 
 Every function returns a Figure and handles any number of channels (`squeeze=False` subplots, one row

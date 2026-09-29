@@ -101,8 +101,11 @@ def plot_waveforms(take, t0, t1, channels=None, cfg=None, highpass_hz=None):
 
 
 # ---------------------------------------------------------------- spectrogram
-def spectrogram_image(feat, ch, t_range=None, fmax=None, fmin=0.0, max_cols=1500, max_rows=700):
+def spectrogram_image(feat, ch, t_range=None, fmax=None, fmin=0.0, max_cols=1500, max_rows=700,
+                      hide_masked=False):
     """Time- and frequency-decimated spectrogram in LINEAR power for display.
+    hide_masked=True blanks (NaN) every column that is more than half masked time, so chirps
+    and other excluded windows appear as gaps instead of stripes.
     Returns (t_edges, f_edges, P[rows, cols])."""
     t = feat.t_psd
     f = feat.freqs
@@ -117,8 +120,15 @@ def spectrogram_image(feat, ch, t_range=None, fmax=None, fmin=0.0, max_cols=1500
     nrow = jf.size // kf
     P = feat.psd(ch)
     img = np.empty((nrow, ncol))
+    msk = M.mask_array(t, feat.mask_windows) if hide_masked else None
     for c in range(ncol):
         sl = np.asarray(P[it[c * kt]:it[c * kt] + kt, jf[0]:jf[0] + nrow * kf], float)
+        if msk is not None:
+            keep = ~msk[it[c * kt]:it[c * kt] + kt]
+            if keep.sum() * 2 <= kt:
+                img[:, c] = np.nan
+                continue
+            sl = sl[keep]
         img[:, c] = sl.mean(axis=0).reshape(nrow, kf).mean(axis=1)
     dt = feat.psd_dt * kt
     te = t[it[0]] - feat.psd_dt / 2 + dt * np.arange(ncol + 1)
@@ -127,27 +137,88 @@ def spectrogram_image(feat, ch, t_range=None, fmax=None, fmin=0.0, max_cols=1500
     return te, fe, img
 
 
+def calibration_db(feat, ch):
+    """(offset_dB, unit) turning dB re FS^2 into dB re 1 uPa^2 for a channel whose config
+    entry has `pa_per_fs` (pascals per unit of digital full scale, from the sensor sensitivity
+    and the recorder gain: pa_per_fs = V_fullscale / (sensitivity_V_per_Pa)).  Without it the
+    offset is 0 and the unit stays dB re FS^2 (uncalibrated)."""
+    k = feat.info(ch).get("pa_per_fs")
+    if not k:
+        return 0.0, "dB re FS²"
+    return float(10 * np.log10(float(k) ** 2 / 1e-12)), "dB re 1 µPa²"
+
+
+def spectrogram_db(feat, ch, t_range=None, fmax=None, fmin=0.0, units="fs", background=None,
+                   background_feat=None, diff="ratio", max_cols=1500, max_rows=700,
+                   hide_masked=False):
+    """Spectrogram as an image in dB, three modes:
+
+      background=None            absolute level, dB re FS^2/Hz (or dB re 1 uPa^2/Hz with
+                                 units="pa" and a pa_per_fs calibration)
+      background=(t0, t1)        DIFFERENCE IMAGE against the mean spectrum of that window
+                                 (a quiet / background part), from this take or from
+                                 background_feat (a separate background take, same sensors):
+          diff="ratio"   10 log10(P / P_bg)               0 dB = same as background
+          diff="excess"  10 log10(max(P - P_bg, 0))       what was ADDED, in absolute units
+
+    Returns (t_edges, f_edges, D_dB, colourbar_label, symmetric)."""
+    te, fe, img = spectrogram_image(feat, ch, t_range, fmax, fmin=fmin, max_cols=max_cols,
+                                    max_rows=max_rows, hide_masked=hide_masked)
+    off, unit = calibration_db(feat, ch) if units == "pa" else (0.0, "dB re FS²")
+    if background is None:
+        return te, fe, dsp.db(img) + off, f"{unit}/Hz", False
+    bf = background_feat or feat
+    Pb, n = bf.psd_mean(ch, *background)
+    if Pb is None:
+        raise ValueError(f"no unmasked frames in background window {background}")
+    # average the background over exactly the frequency bins that make up each image row
+    k = np.digitize(bf.freqs, fe) - 1
+    ok = (k >= 0) & (k < len(fe) - 1)
+    Pb_rows = (np.bincount(k[ok], Pb[ok], minlength=len(fe) - 1)
+               / np.maximum(np.bincount(k[ok], minlength=len(fe) - 1), 1))
+    src = f"{bf.take} {background[0]:g}-{background[1]:g} s"
+    if diff == "ratio":
+        return te, fe, dsp.db(img / np.maximum(Pb_rows[:, None], 1e-30)), f"dB over background ({src})", True
+    ex = img - Pb_rows[:, None]
+    D = np.where(ex > 0, dsp.db(np.maximum(ex, 1e-30)) + off, np.nan)
+    return te, fe, D, f"excess over {src}, {unit}/Hz", False
+
+
 def plot_spectrogram(feat, channels=None, fmax=None, fmin=0.0, t_range=None, clim=None,
-                     pct=(2, 99.5), log_f=False, markers=None, cmap="magma"):
-    """One spectrogram panel per channel, dB re FS^2/Hz.  Colour limits from percentiles of
-    the data (or clim=(lo, hi) to fix them, which you should do when comparing takes)."""
+                     pct=(2, 99.5), log_f=False, markers=None, cmap=None, units="fs",
+                     background=None, background_feat=None, diff="ratio", hide_masked=False):
+    """One spectrogram panel per channel.
+
+    clim=(lo, hi) fixes the colour/level range in dB (use the SAME clim for every take and
+    zoom you want to compare); otherwise limits come from the pct percentiles of the data.
+    hide_masked=True shows masked time (chirps etc.) as gaps.
+    units="pa" shows dB re 1 uPa^2/Hz for channels with a pa_per_fs calibration.
+    background=(t0, t1) [+ background_feat] gives a difference image (see spectrogram_db)."""
     chans = _chs(feat, channels)
     fig, axs = _axes(len(chans), 2.2)
     for ax, c in zip(axs, chans):
-        te, fe, img = spectrogram_image(feat, c, t_range, fmax, fmin=max(fmin, 1.0 if log_f else fmin))
-        D = dsp.db(img)
-        lo, hi = clim or np.percentile(D[np.isfinite(D)], pct)
-        pm = ax.pcolormesh(te, fe / 1e3, D, vmin=lo, vmax=hi, cmap=cmap, shading="flat",
-                           rasterized=True)
+        te, fe, D, lab, sym = spectrogram_db(feat, c, t_range, fmax, max(fmin, 1.0 if log_f else fmin),
+                                             units, background, background_feat, diff,
+                                             hide_masked=hide_masked)
+        fin = D[np.isfinite(D)]
+        lo, hi = clim or (np.percentile(fin, pct) if fin.size else (0, 1))
+        if sym and clim is None:
+            m = max(abs(lo), abs(hi))
+            lo, hi = -m, m
+        pm = ax.pcolormesh(te, fe / 1e3, D, vmin=lo, vmax=hi, shading="flat", rasterized=True,
+                           cmap=cmap or ("RdBu_r" if sym else "magma"))
         if log_f:
             ax.set_yscale("log")
         ax.set_ylabel("frequency [kHz]")
         ax.set_title(feat.label(c), loc="left")
         ax.grid(False)
+        if background is not None and background_feat is None:
+            ax.axvspan(*background, ymin=0.97, ymax=1.0, color=INK, lw=0)
         _marks(ax, markers)
-        fig.colorbar(pm, ax=ax, pad=0.01, label="dB re FS²/Hz")
+        fig.colorbar(pm, ax=ax, pad=0.01, label=lab)
     axs[-1].set_xlabel("time from take start [s]")
-    fig.suptitle(f"{feat.take}: spectrogram ({feat.psd_dt:g} s frames, "
+    kind = "difference image" if background is not None else "spectrogram"
+    fig.suptitle(f"{feat.take}: {kind} ({feat.psd_dt:g} s frames, "
                  f"{feat.freqs[1]-feat.freqs[0]:.1f} Hz bins)", fontsize=10)
     return fig
 
@@ -528,4 +599,100 @@ def plot_feature_space(features, labels, scores, evr, x="f_peak_hz", y="decay_ms
     axs[1].set_xlabel(f"PC1 ({100*evr[0]:.0f} %)")
     axs[1].set_ylabel(f"PC2 ({100*evr[1]:.0f} %)")
     axs[1].set_title("standardised log-features, PCA", loc="left")
+    return fig
+
+
+def plot_glide_interpretation(interp, title=""):
+    """Three panels for one ridge: the observed f(t); the free-bubble radius it implies with
+    the capillary length (Bond = 1) marked; the void fraction a bubbly layer of each assumed
+    thickness would need."""
+    from .physics import capillary_length
+    fig, axs = plt.subplots(3, 1, figsize=(8.5, 7.5), sharex=True, constrained_layout=True)
+    axs[0].plot(interp.t_s, interp.f_hz / 1e3, color=INK)
+    axs[0].set_yscale("log")
+    axs[0].set_ylabel("ridge f [kHz]")
+    axs[0].set_title("observed ridge (10 s running median)", loc="left")
+    axs[1].plot(interp.t_s, interp.R_minnaert_mm, color=PALETTE[0], label="free bubble (Minnaert)")
+    axs[1].plot(interp.t_s, interp.R_wall_mm, color=PALETTE[1], ls="--", label="bubble touching a wall")
+    lc = capillary_length() * 1e3
+    axs[1].axhline(lc, color=PALETTE[7], lw=1)
+    axs[1].text(interp.t_s.iloc[0], lc, f" capillary length {lc:.2f} mm: Bond = 1, no free sphere above",
+                color=PALETTE[7], fontsize=8, va="bottom")
+    axs[1].set_ylabel("implied radius [mm]")
+    axs[1].legend(loc="upper left")
+    axs[1].set_title("hypothesis A: a single growing bubble", loc="left")
+    for i, c in enumerate([c for c in interp.columns if c.startswith("beta_h")]):
+        axs[2].plot(interp.t_s, interp[c], color=band_color(i + 2), label=f"layer {c[6:]}")
+    axs[2].set_yscale("log")
+    axs[2].set_ylabel("required void fraction")
+    axs[2].set_xlabel("time from take start [s]")
+    axs[2].legend(loc="lower right", ncol=2)
+    axs[2].set_title("hypothesis B: quarter-wave mode of a bubbly layer (Wood's law); gaps = impossible",
+                     loc="left")
+    fig.suptitle(title or "what the ridge would require under each mechanism", fontsize=10)
+    return fig
+
+
+# ---------------------------------------------------------------- acoustics vs pH
+def plot_correlation_panel(x, y, res, x_label="level [dB]", y_label="pH", x_in_db=True,
+                           title=""):
+    """Left: both series on a shared lab-clock axis (two panels, no twin axis).  Right: y
+    against x at the best lag, with r, rho, n, n_eff and the n_eff p-value printed."""
+    import pandas as pd
+    xx = dsp.db(x) if x_in_db else x
+    fig = plt.figure(figsize=(12, 4.2), constrained_layout=True)
+    gs = fig.add_gridspec(2, 2, width_ratios=[1.8, 1])
+    a0 = fig.add_subplot(gs[0, 0])
+    a1 = fig.add_subplot(gs[1, 0], sharex=a0)
+    a0.plot(xx.index, xx.to_numpy(), color=PALETTE[0], lw=0.9)
+    a0.set_ylabel(x_label)
+    a1.plot(y.index, y.to_numpy(), "o-", ms=2.5, color=INK, lw=0.8)
+    a1.set_ylabel(y_label)
+    _datetime_axis(a1)
+    a2 = fig.add_subplot(gs[:, 1])
+    lag = res.get("lag_s", 0.0) or 0.0
+    dt = 10.0
+    rule = f"{int(dt*1000)}ms"
+    xs = xx.resample(rule).mean()
+    ys = y.resample(rule).mean().shift(-int(round(lag / dt)))
+    idx = xs.index.union(ys.index)
+    xs, ys = xs.reindex(idx), ys.reindex(idx)
+    m = xs.notna() & ys.notna()
+    tnum = (xs.index[m] - xs.index[m][0]).total_seconds() / 60 if m.any() else []
+    sc = a2.scatter(xs[m], ys[m], c=tnum, cmap="viridis", s=14, edgecolor="none")
+    fig.colorbar(sc, ax=a2, label="minutes")
+    if m.sum() > 2:
+        p = np.polyfit(xs[m], ys[m], 1)
+        xl = np.linspace(xs[m].min(), xs[m].max(), 20)
+        a2.plot(xl, np.polyval(p, xl), color=PALETTE[1])
+    a2.set_xlabel(x_label)
+    a2.set_ylabel(y_label + (f" (shifted {lag:+.0f} s)" if lag else ""))
+    txt = (f"r = {res.get('pearson_r', np.nan):.2f}, rho = {res.get('spearman_rho', np.nan):.2f}\n"
+           f"n = {res.get('n', 0)}, n_eff = {res.get('n_eff', 0)}, p(n_eff) = {res.get('p_value_neff', np.nan):.2g}")
+    a2.text(0.02, 0.02, txt, transform=a2.transAxes, fontsize=8)
+    fig.suptitle(title, fontsize=10)
+    return fig
+
+
+def plot_band_scan(scan, title=""):
+    """Correlation of each narrow band with the target vs band centre frequency.  Filled
+    markers: p(n_eff) < 0.05.  A real relation shows as a coherent run of bands."""
+    fig, axs = plt.subplots(2, 1, figsize=(8, 5), sharex=True, constrained_layout=True)
+    if not len(scan):
+        return fig
+    sig = scan.p_value_neff < 0.05
+    fc = scan.f_centre / 1e3
+    axs[0].plot(fc, scan.pearson_r, color="0.6", lw=0.8)
+    axs[0].scatter(fc[sig], scan.pearson_r[sig], color=PALETTE[0], s=28, label="p(n_eff) < 0.05")
+    axs[0].scatter(fc[~sig], scan.pearson_r[~sig], facecolor="none", edgecolor=PALETTE[0], s=28,
+                   label="not significant")
+    axs[0].axhline(0, color="0.6", lw=0.6)
+    axs[0].set_ylabel("Pearson r")
+    axs[0].set_ylim(-1.05, 1.05)
+    axs[0].legend(loc="best")
+    axs[1].plot(fc, scan.lag_s, "o-", color=PALETTE[1], ms=4)
+    axs[1].set_ylabel("best lag [s]")
+    axs[1].set_xlabel("band centre [kHz]")
+    axs[1].set_xscale("log")
+    axs[0].set_title(title or "which band tracks the target?", loc="left")
     return fig

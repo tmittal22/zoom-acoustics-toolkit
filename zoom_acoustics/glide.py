@@ -188,7 +188,7 @@ def summarize(track, glide_octaves=-0.5, edge_s=3.0, min_contrast_db=6.0, lock_s
                      "not a free sphere. Do not quote it as a bubble size.")
 
 
-def harmonic_ladder(feat, ch, base_window, track, mults=(0.5, 1, 1.5, 2, 2.5, 3, 4),
+def harmonic_ladder(feat, ch, base_window, track, mults=(0.5, 1, 1.5, 2, 2.5, 3, 4, 5),
                     halfwidth=0.04, side=(0.10, 0.20), base_feat=None):
     """Is there a line at m * f1(t) along a measured ridge f1(t)?
 
@@ -220,4 +220,59 @@ def harmonic_ladder(feat, ch, base_window, track, mults=(0.5, 1, 1.5, 2, 2.5, 3,
                          n_frames=int(c.size),
                          median_contrast_dB=float(np.median(c)) if c.size else np.nan,
                          frac_above_3dB=float(np.mean(c > 3)) if c.size else np.nan))
+    return pd.DataFrame(rows)
+
+
+# ================================================================ interpretation
+def interpret(track, depths_m=(0.005, 0.01, 0.02, 0.04), smooth_s=10.0):
+    """What each candidate mechanism would REQUIRE to produce this ridge (THEORY section 12,
+    docs/GLIDE_INTERPRETATION.md).  Nothing here is a measurement of the mechanism; it turns
+    one observed f(t) into the parameter each hypothesis needs, so impossible readings show.
+
+    Columns per frame:
+      R_minnaert_mm     radius of a FREE bubble ringing at f (hypothesis A: one growing bubble)
+      dRdt_um_per_s     growth rate that bubble would need (from the smoothed track)
+      bond              (R / l_c)^2; >= 1 means hypothesis A is not self-consistent
+      R_wall_mm         same, for a bubble touching a rigid wall: the wall lowers its frequency
+                        by 0.816 (Strasberg 1953), so the observed f needs a SMALLER bubble
+      beta_h{d}mm       void fraction a bubbly LAYER of thickness d would need (hypothesis B,
+                        quarter-wave mode); NaN = impossible at any beta <= 2 %
+    """
+    from .physics import minnaert_R, bond_number, wall_factor, beta_from_layer_mode
+    t = track.t_s.to_numpy(float)
+    fr = track.f_hz.to_numpy(float)
+    dt = float(np.median(np.diff(t))) if len(t) > 1 else 1.0
+    w = max(1, int(round(smooth_s / dt)))
+    fs = pd.Series(fr).rolling(w, center=True, min_periods=1).median().to_numpy()
+    R = np.atleast_1d(minnaert_R(fs))
+    # wall: f_wall = f_free(R) * 0.816 -> the free-bubble frequency is f / 0.816
+    Rw = np.atleast_1d(minnaert_R(fs / wall_factor(1.0, 1.0)))
+    dRdt = np.gradient(R, t) if len(t) > 2 else np.full(len(t), np.nan)
+    out = pd.DataFrame(dict(t_s=t, f_hz=fs, R_minnaert_mm=R * 1e3, dRdt_um_per_s=dRdt * 1e6,
+                            bond=bond_number(R), R_wall_mm=Rw * 1e3))
+    for d in depths_m:
+        out[f"beta_h{d*1e3:g}mm"] = beta_from_layer_mode(fs, d)
+    return out
+
+
+def interpretation_summary(interp):
+    """One line per hypothesis: range of the required parameter and whether it stays
+    physical over the whole track."""
+    rows = [dict(hypothesis="A: one free bubble growing",
+                 requires=f"R {interp.R_minnaert_mm.min():.2f}-{interp.R_minnaert_mm.max():.2f} mm, "
+                          f"median dR/dt {np.nanmedian(interp.dRdt_um_per_s):.1f} um/s",
+                 physical=bool((interp.bond < 1).all()),
+                 note=f"Bond max {interp.bond.max():.2f} (>= 1 impossible as a free sphere)"),
+            dict(hypothesis="A': bubble touching a wall",
+                 requires=f"R {interp.R_wall_mm.min():.2f}-{interp.R_wall_mm.max():.2f} mm",
+                 physical=bool((interp.R_wall_mm / 1e3 / 2.727e-3 < 1).all()),
+                 note="a wall lowers f (x0.816 touching), so the SAME f needs a bubble 0.816x "
+                      "smaller; physical = stays below the capillary length")]
+    for c in [c for c in interp.columns if c.startswith("beta_h")]:
+        b = interp[c]
+        rows.append(dict(hypothesis=f"B: bubbly layer, thickness {c[6:]}",
+                         requires=(f"void fraction {np.nanmin(b):.1e}-{np.nanmax(b):.1e}"
+                                   if b.notna().any() else "no beta <= 2 % works"),
+                         physical=bool(b.notna().all()),
+                         note="beta must RISE as f falls; check against gas production"))
     return pd.DataFrame(rows)

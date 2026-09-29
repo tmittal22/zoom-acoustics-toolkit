@@ -226,3 +226,30 @@ are not a measurement. For bubble size, use a camera on the crystal.
 * **Mechanism unknown.** A Minnaert reading of the Sep-2026 ridge ends at R = 3.2 mm, Bond number 1.3,
   which cannot be a free bubble. The code prints the Bond number next to every radius for this reason.
   Do not quote the radius.
+
+## 14. Seeing the data: full range, zooms, difference images
+
+* Start every take with `views.plot_overview_zoom(f, ch, take=take)`: the whole take plus automatic zooms
+  on the baseline, the onset, the loudest 30 s, a significant glide and the strongest single event (the
+  last drawn from the **raw audio**, because a 0.25 s frame is longer than the event).
+* Add `background=(t0, t1)` for a **difference image**: what changed relative to a quiet part of the same
+  take, or of a separate background take (`background_feat=`). It is the fastest way to see what the
+  reaction added.
+* Fix the colour range with `clim=(lo, hi)` when comparing takes. Otherwise each figure scales itself and
+  equal colours do not mean equal levels.
+* Absolute pressure needs a calibration: put `pa_per_fs` for a channel in the config (from the
+  hydrophone sensitivity and the recorder gain) and use `units="pa"`. Without it, levels are dB re FS.
+
+## 15. Correlating sound with pH
+
+* Correlate **excess** levels (background subtracted), in bands you choose (`correlate.band_timeline`),
+  or trigger rates (`correlate.event_count_timeline`, optionally only loud events), against pH or
+  **dpH/dt** (`correlate.ph_rate`).
+* Read **n_eff**, not n. One take with one decaying reaction gives n_eff ≈ 2 in the demo: every band
+  correlates at |r| ≈ 0.9, and nothing is significant. A relation between sound and pH is established by
+  **several takes under different conditions** (molarity, sample, temperature) that fall on one line, or by
+  `differences=True` (changes vs changes). A high r from a single run does not establish it.
+* `correlate.band_scan` shows which bands track pH. With 16 bands, one "significant" band is expected by
+  chance, so look for a coherent range of bands.
+* Best lags that jump from band to band are noise. Trust a lag only if it is stable across bands and
+  takes, and physically reasonable (≥ 0, seconds to tens of seconds: probe response and mixing).

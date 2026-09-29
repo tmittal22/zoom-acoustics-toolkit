@@ -23,3 +23,5 @@ violates one is wrong or needs an explanation written next to it.
 | P16 | A glide is reported only if its median ridge contrast is clearly above the noise-path value (2–4 dB), and the air mic shows none | a tracker returns a path through noise too | `glide.summarize` → `significant`, air-mic row |
 | P17 | A "repeater" cluster is clearly more self-similar than the bubble clusters and not on an apparatus line | similar-frequency ringdowns correlate regardless of source | `cluster_waveforms` table + gallery |
 | P18 | Temporal statistics exclude gaps across masks | mask holes are not intervals (they inflated CV 2.58 vs 1.24 in Sep 2026) | `catalogue.interevent_stats(windows=...)` |
+| P19 | A sound–pH relation is quoted with n_eff and holds across takes/conditions, not only within one monotonic run | shared trends correlate whatever the mechanism | `correlate.correlate` n_eff, several takes |
+| P20 | A glide mechanism is stated only with its required parameter shown physical (Bond < 1, beta <= 2 %) and the discriminating test named | frequency alone cannot identify the mechanism | `glide.interpret`, GLIDE_INTERPRETATION §3 |
