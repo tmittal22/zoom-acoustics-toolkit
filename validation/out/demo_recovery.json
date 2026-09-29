@@ -1,0 +1,208 @@
+{
+ "R1_timing": {
+  "DEMO_002": {
+   "n_true": 3696,
+   "n_trig": 2893,
+   "recall": 0.8035714285714286,
+   "false_frac": 0.012789491876944349,
+   "recall_isolated_20ms": 0.8877952755905512,
+   "recall_crowded": 0.7716417910447761,
+   "triggers_per_bubble": 0.7827380952380952
+  },
+  "DEMO_004": {
+   "n_true": 902,
+   "n_trig": 857,
+   "recall": 0.9634146341463414,
+   "false_frac": 0.0,
+   "recall_isolated_20ms": 0.9747774480712166,
+   "recall_crowded": 0.9298245614035088,
+   "triggers_per_bubble": 0.950110864745011
+  }
+ },
+ "R2_rate": {
+  "median_detected_over_true": 0.8584658219072274,
+  "p10": 0.7547215657263396,
+  "p90": 0.9761351638953345,
+  "n_bins": 40,
+  "tau_fit_s": 343.65540754620446,
+  "tau_true_s": 300.0
+ },
+ "R3_level_vs_pH": {
+  "slope_raw_dB_per_pH": -8.187641504553152,
+  "slope_excess_dB_per_pH": -9.34208194205558,
+  "slope_excess_se": 0.4830481069145387,
+  "expected": -10.0,
+  "n": 28
+ },
+ "R4_onset": {
+  "detected_s": 40.125,
+  "true_s": 40.0,
+  "tick_s": 35.0
+ },
+ "R5_chirp_grid": {
+  "broadband": {
+   "first_s": 5.124999999999982,
+   "period_s": 10.000000000000005,
+   "n_inliers": 6,
+   "n_candidates": 6,
+   "residual_ms": 1.0277145035851365e-11
+  },
+  "audio_band": {
+   "first_s": 5.374999999999988,
+   "period_s": 10.000000000000005,
+   "n_inliers": 6,
+   "n_candidates": 6,
+   "residual_ms": 8.727479759911977e-12
+  },
+  "truth": {
+   "first_s": 5.1,
+   "period_s": 10.0,
+   "dur_s": 1.0
+  }
+ },
+ "G1_glide": [
+  {
+   "take": "DEMO_002",
+   "channel": 1,
+   "octaves": -0.432,
+   "octaves_true": -0.434,
+   "contrast_db": 5.1,
+   "significant": false,
+   "t_lock_s": 46.625
+  },
+  {
+   "take": "DEMO_002",
+   "channel": 2,
+   "octaves": -0.432,
+   "octaves_true": -0.434,
+   "contrast_db": 14.7,
+   "significant": true,
+   "t_lock_s": 46.625
+  },
+  {
+   "take": "DEMO_002",
+   "channel": 3,
+   "octaves": -0.544,
+   "octaves_true": -0.408,
+   "contrast_db": 18.7,
+   "significant": true,
+   "t_lock_s": 54.375
+  },
+  {
+   "take": "DEMO_002",
+   "channel": 4,
+   "octaves": 0.302,
+   "octaves_true": -0.434,
+   "contrast_db": 2.8,
+   "significant": false,
+   "t_lock_s": NaN
+  },
+  {
+   "take": "DEMO_003",
+   "channel": 1,
+   "octaves": -0.482,
+   "octaves_true": -0.486,
+   "contrast_db": 14.7,
+   "significant": true,
+   "t_lock_s": 1.125
+  },
+  {
+   "take": "DEMO_003",
+   "channel": 2,
+   "octaves": -0.482,
+   "octaves_true": -0.486,
+   "contrast_db": 17.3,
+   "significant": true,
+   "t_lock_s": 1.125
+  },
+  {
+   "take": "DEMO_004",
+   "channel": 1,
+   "octaves": -0.38,
+   "octaves_true": -0.386,
+   "contrast_db": 25.5,
+   "significant": true,
+   "t_lock_s": 1.125
+  }
+ ],
+ "G1_ch3_seed_4_8kHz": {
+  "octaves": -0.432,
+  "octaves_true": -0.434,
+  "t_lock_s": 46.625
+ },
+ "G1_harmonic_ladder_ch2": [
+  {
+   "multiple": 0.5,
+   "control": false,
+   "n_frames": 443,
+   "median_contrast_dB": 1.8,
+   "frac_above_3dB": 0.33
+  },
+  {
+   "multiple": 1.0,
+   "control": false,
+   "n_frames": 443,
+   "median_contrast_dB": 14.94,
+   "frac_above_3dB": 0.97
+  },
+  {
+   "multiple": 1.5,
+   "control": true,
+   "n_frames": 443,
+   "median_contrast_dB": 2.47,
+   "frac_above_3dB": 0.42
+  },
+  {
+   "multiple": 2.0,
+   "control": false,
+   "n_frames": 443,
+   "median_contrast_dB": 21.93,
+   "frac_above_3dB": 0.96
+  },
+  {
+   "multiple": 2.5,
+   "control": true,
+   "n_frames": 443,
+   "median_contrast_dB": 2.32,
+   "frac_above_3dB": 0.23
+  },
+  {
+   "multiple": 3.0,
+   "control": false,
+   "n_frames": 443,
+   "median_contrast_dB": 2.63,
+   "frac_above_3dB": 0.3
+  },
+  {
+   "multiple": 4.0,
+   "control": false,
+   "n_frames": 200,
+   "median_contrast_dB": 2.72,
+   "frac_above_3dB": 0.32
+  }
+ ],
+ "C1_clustering": {
+  "Ch1": {
+   "n_events": 600,
+   "n_rattle_in_sample": 11,
+   "top_cluster_size": 30,
+   "top_median_rho": 0.883,
+   "top_rattle_members": 0,
+   "next_best_rho": 0.878,
+   "n_candidate_clusters": 20,
+   "q_est_median_bubbles": 8.07,
+   "f_peak_median_bubbles": 4500.0
+  },
+  "Ch3": {
+   "n_events": 600,
+   "n_rattle_in_sample": 37,
+   "top_cluster_size": 37,
+   "top_median_rho": 0.94,
+   "top_rattle_members": 37,
+   "next_best_rho": 0.87,
+   "n_candidate_clusters": 60,
+   "q_est_median_bubbles": 9.84,
+   "f_peak_median_bubbles": 5583.3
+  }
+ }
+}

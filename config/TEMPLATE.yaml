@@ -1,0 +1,91 @@
+# ============================================================================
+#  Experiment config.  Copy this file to  config/local_<name>.yaml  and edit.
+#  (config/local_*.yaml is git-ignored, so your paths never end up in the repo.)
+#
+#  Relative paths are relative to THIS file.  Absolute paths work too.
+#  Only data_dir is required; everything else has a sensible default.
+# ============================================================================
+
+project: my_experiment
+
+# Folder with the recorder's WAV files (poly, split _0001/_0002, or mono _TrN files).
+data_dir: /path/to/recorder/folder
+recursive: false            # true: also look in sub-folders
+file_pattern: null          # regex on file names, e.g. "^2610" to take one day only
+
+# Where processed feature bundles and figures go.  The cache is ~1-10 % of the raw size.
+cache_dir: ../cache/my_experiment
+figures_dir: ../figures/my_experiment
+
+# Recorder clock correction, seconds.  lab time = recorder time + this.
+# Measure it: clap (or tap the beaker) at a wall-clock time you write down, then
+# find the clap in the recording.  If the recorder clock was set to UTC and your
+# pH logger uses local time (EDT = UTC-4), this is -14400.
+recorder_clock_offset_s: 0.0
+
+# ---------------------------------------------------------------- channels
+# Keys are recorder TRACK numbers (Ch1 = Tr1).  sensor: hydrophone | contact | air | other
+# Takes that recorded fewer tracks simply do not have the missing channels.
+channels:
+  1: {name: "Hydrophone A", sensor: hydrophone}
+  2: {name: "Hydrophone B", sensor: hydrophone}
+  3: {name: "Contact sensor", sensor: contact}
+  4: {name: "Air mic", sensor: air}
+
+# ---------------------------------------------------------------- masks
+# Time windows EXCLUDED from every level, spectrum and trigger rate.
+# A periodic source for ALL takes (e.g. an active chirp every 10 s):
+masks:
+  periodic: null
+  # periodic: {period_s: 10.0, first_s: 1.4, pad_before_s: 0.5, pad_after_s: 1.5}
+
+# ---------------------------------------------------------------- per-take notes
+# Anything specific to one take.  Take names are the file base names (see notebook 00).
+takes:
+  # 261015_003:
+  #   note: "2 M HCl, 5 mL, calcite crystal A"
+  #   masks: [[120.0, 125.5]]            # someone bumped the bench
+  #   periodic: {period_s: 10.0, first_s: 3.2}
+  #   use_channels: [1, 2]               # process only these tracks
+  #   channels: {2: {name: "Hydrophone B (moved)", sensor: hydrophone}}
+  #   clock_offset_s: 0.0                # overrides recorder_clock_offset_s for this take
+  #   events: {acid: 45.0}               # for your own notes / notebook markers
+
+# ---------------------------------------------------------------- processing
+# Defaults are fine for most work.  Changing anything here triggers re-processing.
+dsp:
+  bands:                    # [name, low Hz, high Hz]; bands above Nyquist are dropped
+    - [low,     20,  1200]  # handling, pours, room rumble
+    - [audio, 1200, 24000]  # main bubble band
+    - [rig,   5400,  5900]  # the 5.6 kHz apparatus line of the Sep-2026 rig (check yours)
+    - [hb1,  25000, 40000]
+    - [hb2,  40000, 65000]
+    - [hb3,  65000, 85000]
+  detect_bands: [audio]     # bands the STA/LTA event detector runs on
+  level_dt: 0.25            # s, band-level time step
+  psd_dt: 0.25              # s, spectrogram frame.  LONG RECORDINGS: use 1-10 s
+  psd_nperseg: auto         # auto = ~23 Hz frequency bins at any sample rate
+  psd_fmax_hz: null         # e.g. 25000 to store the spectrogram only up to 25 kHz
+  env_dt: 0.0005            # s, detector envelope step
+  sta_s: 0.0005             # detector short window
+  lta_s: 0.06               # detector long window
+  trig_on: 8.0              # fire when STA/LTA > this
+  trig_off: 2.0             # re-arm when STA/LTA < this
+  dead_s: 0.0015            # minimum time between triggers
+  store_envelope: auto      # keep the fine envelope (allows re-detection) if < max_envelope_gb
+  max_envelope_gb: 2.0
+  block_s: 10.0             # streaming block; memory ~ block_s * sr * n_ch * 8 bytes
+
+# ---------------------------------------------------------------- pH (or any logger)
+ph:
+  file: null                # path to .csv / .txt / .xlsx
+  sheet: null               # Excel sheet name (null = first)
+  time_col: null            # null = auto-detect
+  date_col: null            # if date and time are separate columns (auto-detected as Date/Time)
+  ph_col: null              # null = auto-detect a column called pH
+  time_format: null         # e.g. "%d/%m/%Y %H:%M:%S" if auto-parsing fails
+  dayfirst: null            # true: 10/09/2026 = 10 Sep; false: 9 Oct; null: refuse if ambiguous
+  base_date: null           # YYYY-MM-DD if the file has times of day but no dates
+  elapsed_unit: null        # 's' | 'min' | 'h' if the time column is elapsed time
+  elapsed_start: null       # LAB-clock datetime of elapsed t = 0, e.g. "2026-10-15 10:02:00"
+  clock_offset_s: 0.0       # lab time = logger time + this (not applied to elapsed_start)

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zoom-acoustics"
+version = "1.0.0"
+license = {text = "MIT"}
+description = "Passive-acoustic analysis of multi-channel Zoom F-series recordings (bubble/reaction acoustics), with pH time-series alignment"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24", "scipy>=1.10", "pandas>=2.0", "matplotlib>=3.7",
+  "soundfile>=0.12", "pyyaml>=6", "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+notebooks = ["jupyterlab>=4", "ipykernel"]
+test = ["pytest>=7"]
+
+[tool.setuptools]
+packages = ["zoom_acoustics"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

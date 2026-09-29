@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.ipynb_checkpoints/
+.pytest_cache/
+# data and generated products never go in git
+demo_data/
+/cache/
+/figures/
+*.WAV
+*.wav
+*.npy
+# personal configs (copy TEMPLATE.yaml to config/local_*.yaml)
+config/local_*.yaml
+validation/out/*.png

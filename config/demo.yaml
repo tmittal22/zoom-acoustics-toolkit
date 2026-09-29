@@ -1,0 +1,37 @@
+# Config for the synthetic demo dataset (python -m zoom_acoustics demo demo_data).
+# Copy config/TEMPLATE.yaml for a real experiment.
+project: demo
+data_dir: ../demo_data/audio
+cache_dir: ../demo_data/cache
+figures_dir: ../demo_data/figures
+recorder_clock_offset_s: 0.0
+
+channels:
+  1: {name: "Hydrophone A", sensor: hydrophone}
+  2: {name: "Hydrophone B", sensor: hydrophone}
+  3: {name: "Contact sensor", sensor: contact}
+  4: {name: "Air mic", sensor: air}
+
+masks:
+  periodic: null
+
+takes:
+  DEMO_001:
+    note: "water only, chirps every 10 s"
+    periodic: {period_s: 10.0, first_s: 5.1, pad_before_s: 0.25, pad_after_s: 1.4}
+  DEMO_002:
+    note: "acid at 40 s, sample dropped at 35 s, chirps every 10 s"
+    periodic: {period_s: 10.0, first_s: 5.1, pad_before_s: 0.25, pad_after_s: 1.4}
+    events: {drop: 35.0, acid: 40.0}
+
+dsp:
+  # The demo files are 48 kHz (Nyquist 24 kHz), so the ultrasonic bands of the default
+  # list are left out here.  If you forget, they are dropped automatically with a note.
+  bands:
+    - [low,     20,  1200]
+    - [audio, 1200, 22000]
+    - [rig,   5400,  5900]
+  detect_bands: [audio]
+
+ph:
+  file: ../demo_data/ph/ph_log.csv

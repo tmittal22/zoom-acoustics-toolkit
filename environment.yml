@@ -1,0 +1,17 @@
+# conda env create -f environment.yml && conda activate zoom-acoustics && pip install -e .
+name: zoom-acoustics
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - scipy
+  - pandas
+  - matplotlib
+  - pysoundfile
+  - pyyaml
+  - openpyxl
+  - jupyterlab
+  - ipykernel
+  - pytest
+  - pip

@@ -1,0 +1,64 @@
+{
+ "take": "260910_011",
+ "duration_s": 384.98460416666666,
+ "process_s": 0.0,
+ "psd_max_rel_diff_per_channel": [
+  0.0,
+  0.0,
+  0.0,
+  0.0
+ ],
+ "env_audio_rel_diff_median_max_per_channel": [
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0
+ ],
+ "level_audio_vs_a4_env_max_rel": [
+  6.085685766432647e-08,
+  6.35980399454894e-08,
+  7.714356531351996e-08,
+  5.8791088441978445e-08
+ ],
+ "triggers_audio": {
+  "Ch1": {
+   "hysteresis": 5389,
+   "a4_immediate_rearm": 6856,
+   "inflation": 1.272
+  },
+  "Ch2": {
+   "hysteresis": 6567,
+   "a4_immediate_rearm": 7156,
+   "inflation": 1.09
+  },
+  "Ch3": {
+   "hysteresis": 4102,
+   "a4_immediate_rearm": 4462,
+   "inflation": 1.088
+  },
+  "Ch4": {
+   "hysteresis": 388,
+   "a4_immediate_rearm": 488,
+   "inflation": 1.258
+  }
+ },
+ "chirp_grid": {
+  "first_s": 1.375,
+  "period_s": 10.0,
+  "n_inliers": 39,
+  "n_candidates": 40,
+  "residual_ms": 0.0
+ },
+ "chirp_grid_audio_band": {
+  "first_s": 1.375,
+  "period_s": 10.0,
+  "n_inliers": 39,
+  "n_candidates": 40,
+  "residual_ms": 0.0
+ },
+ "masked_fraction": 0.1671495413155315
+}
